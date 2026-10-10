@@ -24,15 +24,9 @@ export class ApiService {
   post<TResponse, TBody>(path: string, body: TBody): Observable<TResponse> {
     return this.http.post<TResponse>(`${this.baseUrl}${path}`, body);
   }
-<<<<<<< HEAD
-=======
-
-  patch<TResponse, TBody>(path: string, body: TBody): Observable<TResponse> {
-    return this.http.patch<TResponse>(`${this.baseUrl}${path}`, body);
-  }
 
   /**
-   * Igual que patch() pero devolviendo el valor de la respuesta.
+   * Igual que patch() pero con el cuerpo sin tipar.
    *
    * Existe porque patch tipado con un solo argumento genérico no compila
    * cuando el cuerpo es un objeto literal: TypeScript no puede inferir TBody
@@ -42,5 +36,4 @@ export class ApiService {
   patchWith<TResponse>(path: string, body: unknown): Observable<TResponse> {
     return this.http.patch<TResponse>(`${this.baseUrl}${path}`, body);
   }
->>>>>>> feature/booking
 }
