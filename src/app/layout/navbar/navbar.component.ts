@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { CartService } from '../../core/api/cart.service';
 
 @Component({
   selector: 'app-navbar',
@@ -57,11 +58,20 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
           <button
             type="button"
             class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface
-                   flex items-center justify-center hover:text-primary transition-colors"
-            aria-label="Carrito"
-            (click)="cartOpen.set(!cartOpen())"
+                   flex items-center justify-center hover:text-primary transition-colors
+                   relative"
+            aria-label="Abrir carrito"
+            (click)="cart.toggle()"
           >
             <span class="material-symbols-outlined text-lg">shopping_bag</span>
+            @if (cart.count() > 0) {
+              <span
+                class="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full
+                       bg-primary text-on-primary label-sm flex items-center justify-center"
+              >
+                {{ cart.count() }}
+              </span>
+            }
           </button>
         </div>
 
@@ -122,8 +132,13 @@ export class NavbarComponent {
   ];
 
   protected readonly menuOpen = signal(false);
-  protected readonly cartOpen = signal(false);
   protected readonly scrolled = signal(false);
+
+  /**
+   * El carrito vive en un servicio, no en el componente, para que el
+   * navbar muestre el conteo sin conocer los detalles de la tienda.
+   */
+  protected readonly cart = inject(CartService);
 
   constructor() {
     if (typeof window !== 'undefined') {
