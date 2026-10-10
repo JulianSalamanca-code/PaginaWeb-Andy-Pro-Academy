@@ -1,42 +1,35 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
+import {
+  BookingService,
+  SlotConflictError,
+  num,
+  str,
+  type AvailabilitySlot,
+  type AvailabilityResponse,
+  type Booking,
+} from '../../core/api/booking.service';
+import { CourseService } from '../../core/services/course.service';
+import type { AddOn, ServiceWithAddOns, Specialist } from '../../core/services/catalog.types';
 
-interface BookableService {
-  id: number;
-  name: string;
-  tag: string;
-  price: number;
-  durationMinutes: number;
-  description: string;
-  badge: string;
-}
-
-interface AddOn {
-  id: string;
-  name: string;
-  price: number;
-  extraMinutes: number;
-  description: string;
-}
-
-interface BookingState {
-  serviceId: number | null;
-  addonIds: string[];
-  date: Date | null;
-  timeSlot: string | null;
-  modality: 'studio' | 'domicilio';
-  name: string;
-  phone: string;
-  email: string;
-  notes: string;
-}
-
+/**
+ * Asistente de reserva en cuatro pasos.
+ *
+ * Los horarios vienen de la API, no se calculan en el cliente: el cálculo
+ * en el navegador mostraría horarios que la base ya tiene ocupados, y la
+ * clienta descubriría el problema al confirmar, que es el peor momento.
+ *
+ * El estado vive en signals sueltos en vez de un store externo: el
+ * asistente es el único que los usa y así se evita una capa de indirección
+ * sinBeneficio.
+ */
 @Component({
   selector: 'app-booking-wizard',
   standalone: true,
   imports: [RouterLink],
   template: `
-    <section class="py-16 lg:py-20" id="reservas">
+    <section class="py-16 lg:py-20">
       <div class="container-luxury space-y-12">
         <!-- Encabezado -->
         <div
@@ -60,8 +53,8 @@ interface BookingState {
           @for (step of steps; track step.number) {
             <button
               type="button"
-              class="flex items-center gap-3 p-3.5 rounded-xl text-left
-                     transition-colors disabled:cursor-not-allowed"
+              class="flex items-center gap-3 p-3.5 rounded-xl text-left transition-colors
+                     disabled:cursor-not-allowed disabled:opacity-40"
               [class.bg-surface-container-high]="currentStep() === step.number"
               [class.text-on-surface]="currentStep() === step.number"
               [class.bg-surface-container]="currentStep() !== step.number"
@@ -76,7 +69,7 @@ interface BookingState {
                 [class.text-on-primary]="currentStep() === step.number"
                 [class.bg-surface-container-highest]="currentStep() !== step.number"
               >
-                {{ step.number < currentStep() ? '✓' : step.number }}
+                {{ currentStep() > step.number ? '✓' : step.number }}
               </span>
               <span class="flex flex-col min-w-0">
                 <span
@@ -93,102 +86,117 @@ interface BookingState {
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          <!-- Columna principal: paso activo -->
+          <!-- Columna principal -->
           <div class="lg:col-span-8">
             <!-- PASO 1: Servicio -->
             @if (currentStep() === 1) {
               <div class="space-y-4">
                 <h2 class="text-xl text-on-surface">Elige tu Servicio</h2>
-                @for (service of services; track service.id) {
-                  <div
-                    class="p-6 rounded-2xl cursor-pointer transition-all
-                           bg-surface-container hover:bg-surface-container-high shadow-md"
-                    [class.bg-surface-container-high]="state().serviceId === service.id"
-                    [class.ring-1]="state().serviceId === service.id"
-                    [class.ring-primary]="state().serviceId === service.id"
-                    (click)="selectService(service.id)"
-                    (keydown.enter)="selectService(service.id)"
-                    tabindex="0"
-                    role="button"
-                    [attr.aria-pressed]="state().serviceId === service.id"
-                  >
+
+                @if (loadingServices()) {
+                  @for (i of [1, 2, 3]; track i) {
+                    <div class="p-6 rounded-2xl bg-surface-container animate-pulse h-32"></div>
+                  }
+                } @else {
+                  @for (service of services(); track num(service.service?.id)) {
                     <div
-                      class="flex flex-col sm:flex-row items-start sm:items-center
-                             justify-between gap-4"
+                      class="p-6 rounded-2xl cursor-pointer transition-all
+                             bg-surface-container hover:bg-surface-container-high shadow-md"
+                      [class.bg-surface-container-high]="num(selectedService()?.service?.id) === num(service.service?.id)"
+                      [class.ring-1]="num(selectedService()?.service?.id) === num(service.service?.id)"
+                      [class.ring-primary]="num(selectedService()?.service?.id) === num(service.service?.id)"
+                      (click)="selectService(service)"
+                      (keydown.enter)="selectService(service)"
+                      tabindex="0"
+                      role="button"
+                      [attr.aria-pressed]="num(selectedService()?.service?.id) === num(service.service?.id)"
                     >
-                      <div class="flex items-start gap-4">
-                        <div
-                          class="w-6 h-6 rounded-full flex items-center justify-center mt-1 shrink-0
-                                 text-primary bg-surface-container-highest"
-                          [class.bg-primary]="state().serviceId === service.id"
-                          [class.text-on-primary]="state().serviceId === service.id"
-                        >
-                          @if (state().serviceId === service.id) {
-                            <span class="material-symbols-outlined text-sm">check</span>
-                          }
-                        </div>
-                        <div class="space-y-1.5">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <h3 class="text-xl text-on-surface">{{ service.name }}</h3>
-                            <span
-                              class="px-2.5 py-0.5 rounded-full bg-primary/10
-                                     text-primary label-sm"
-                            >
-                              {{ service.tag }}
-                            </span>
-                          </div>
-                          <p class="text-sm text-on-surface-variant max-w-xl">
-                            {{ service.description }}
-                          </p>
-                        </div>
-                      </div>
-
                       <div
-                        class="flex sm:flex-col items-end justify-between
-                               w-full sm:w-auto shrink-0 pl-10 sm:pl-0"
+                        class="flex flex-col sm:flex-row items-start sm:items-center
+                               justify-between gap-4"
                       >
-                        <span class="text-xl text-primary">{{ formatPrice(service.price) }}</span>
-                        <span class="label-sm text-outline flex items-center gap-1">
-                          <span class="material-symbols-outlined text-sm">schedule</span>
-                          {{ service.durationMinutes }} min
-                        </span>
-                      </div>
-                    </div>
+                        <div class="flex items-start gap-4">
+                          <div
+                            class="w-6 h-6 rounded-full flex items-center justify-center mt-1 shrink-0
+                                   text-primary bg-surface-container-highest"
+                            [class.bg-primary]="num(selectedService()?.service?.id) === num(service.service?.id)"
+                            [class.text-on-primary]="num(selectedService()?.service?.id) === num(service.service?.id)"
+                          >
+                            @if (num(selectedService()?.service?.id) === num(service.service?.id)) {
+                              <span class="material-symbols-outlined text-sm">check</span>
+                            }
+                          </div>
+                          <div class="space-y-1.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                              <h3 class="text-xl text-on-surface">{{ str(service.service?.name) }}</h3>
+                              <span
+                                class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary label-sm"
+                              >
+                                {{ str(service.service?.tagline) }}
+                              </span>
+                            </div>
+                            <p class="text-sm text-on-surface-variant max-w-xl">
+                              {{ str(service.service?.description) }}
+                            </p>
+                          </div>
+                        </div>
 
-                    <!-- Complementos, solo para el servicio elegido -->
-                    @if (state().serviceId === service.id && serviceSupportsAddons(service.id)) {
-                      <div class="mt-5 pt-5 border-t border-surface-variant">
-                        <p class="label-md text-primary mb-3">Complementos opcionales</p>
-                        <div class="space-y-2">
-                          @for (addon of addons; track addon.id) {
-                            <label
-                              class="flex items-start gap-3 p-3 rounded-xl
-                                     bg-surface-container cursor-pointer
-                                     hover:bg-surface-container-highest transition-colors"
-                            >
-                              <input
-                                type="checkbox"
-                                class="w-4 h-4 mt-0.5 accent-primary cursor-pointer"
-                                [checked]="state().addonIds.includes(addon.id)"
-                                (change)="toggleAddon(addon.id)"
-                              />
-                              <span class="flex-1">
-                                <span class="flex items-center justify-between gap-3">
-                                  <span class="text-sm text-on-surface">{{ addon.name }}</span>
-                                  <span class="text-sm text-primary shrink-0">
-                                    +{{ formatPrice(addon.price) }}
+                        <div
+                          class="flex sm:flex-col items-end justify-between
+                                 w-full sm:w-auto shrink-0 pl-10 sm:pl-0"
+                        >
+                          <span class="text-xl text-primary">
+                            {{ formatPrice(num(service.service?.price)) }}
+                          </span>
+                          <span class="label-sm text-outline flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">schedule</span>
+                            {{ num(service.service?.durationMinutes) }} min
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Complementos del servicio elegido -->
+                      @if (
+                        num(selectedService()?.service?.id) === num(service.service?.id) &&
+                        service.addOns?.length
+                      ) {
+                        <div class="mt-5 pt-5 border-t border-surface-variant">
+                          <p class="label-md text-primary mb-3">Complementos opcionales</p>
+                          <div class="space-y-2">
+                            @for (addon of service.addOns; track num(addon.id)) {
+                              <label
+                                class="flex items-start gap-3 p-3 rounded-xl bg-surface-container
+                                       cursor-pointer hover:bg-surface-container-highest transition-colors"
+                              >
+                                <input
+                                  type="checkbox"
+                                  class="w-4 h-4 mt-0.5 accent-primary cursor-pointer"
+                                  [checked]="selectedAddonIds().includes(num(addon.id))"
+                                  (change)="toggleAddon(num(addon.id))"
+                                  (click)="$event.stopPropagation()"
+                                />
+                                <span class="flex-1">
+                                  <span class="flex items-center justify-between gap-3">
+                                    <span class="text-sm text-on-surface">{{ str(addon.name) }}</span>
+                                    <span class="text-sm text-primary shrink-0">
+                                      +{{ formatPrice(num(addon.price)) }}
+                                    </span>
+                                  </span>
+                                  <span class="block text-xs text-on-surface-variant mt-0.5">
+                                    {{ str(addon.description) }} · {{ num(addon.extraMinutes) }} min extra
                                   </span>
                                 </span>
-                                <span class="block text-xs text-on-surface-variant mt-0.5">
-                                  {{ addon.description }} · {{ addon.extraMinutes }} min extra
-                                </span>
-                              </span>
-                            </label>
-                          }
+                              </label>
+                            }
+                          </div>
                         </div>
-                      </div>
-                    }
-                  </div>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="text-on-surface-variant py-8">
+                      No se pudieron cargar los servicios. Recarga la página.
+                    </p>
+                  }
                 }
               </div>
             }
@@ -197,18 +205,20 @@ interface BookingState {
             @if (currentStep() === 2) {
               <div class="space-y-5">
                 <h2 class="text-xl text-on-surface">Tu Especialista</h2>
+
                 <div class="card-glass p-6 flex flex-col sm:flex-row items-start gap-5">
                   <div
-                    class="w-20 h-20 rounded-full bg-gradient-to-br from-primary
-                           to-primary-container flex items-center justify-center
-                           text-on-primary shrink-0"
+                    class="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary-container
+                           flex items-center justify-center text-on-primary shrink-0"
                   >
                     <span class="material-symbols-outlined text-4xl">person</span>
                   </div>
                   <div class="space-y-2">
-                    <h3 class="text-2xl text-on-surface">Andy • Master Artist</h3>
+                    <h3 class="text-2xl text-on-surface">
+                      {{ specialist()?.name ?? 'Andy • Master Artist' }}
+                    </h3>
                     <p class="text-sm text-on-surface-variant">
-                      Cosmetóloga &amp; Estilista Titulada
+                      {{ specialist()?.title ?? 'Cosmetóloga & Estilista Titulada' }}
                     </p>
                     <div class="flex flex-wrap gap-4 pt-2">
                       <span class="label-sm text-primary flex items-center gap-1.5">
@@ -219,22 +229,18 @@ interface BookingState {
                         <span class="material-symbols-outlined text-sm">star</span>
                         4.9 / 5.0
                       </span>
-                      <span class="label-sm text-outline flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-sm">workspace_premium</span>
-                        +320 servicios
-                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div class="card-glass p-6 space-y-3">
-                  <h3 class="label-md text-primary">Preparación previa</h3>
-                  @if (selectedService(); as service) {
+                @if (selectedService()?.service?.preparation) {
+                  <div class="card-glass p-6 space-y-3">
+                    <h3 class="label-md text-primary">Preparación previa</h3>
                     <p class="text-sm text-on-surface-variant leading-relaxed">
-                      {{ service.preparation }}
+                      {{ selectedService()?.service?.preparation }}
                     </p>
-                  }
-                </div>
+                  </div>
+                }
 
                 <!-- Modalidad -->
                 <div class="space-y-3">
@@ -244,10 +250,10 @@ interface BookingState {
                       type="button"
                       class="p-5 rounded-2xl text-left transition-all
                              bg-surface-container hover:bg-surface-container-high"
-                      [class.bg-surface-container-high]="state().modality === 'studio'"
-                      [class.ring-1]="state().modality === 'studio'"
-                      [class.ring-primary]="state().modality === 'studio'"
-                      (click)="setModality('studio')"
+                      [class.bg-surface-container-high]="modality() === 'studio'"
+                      [class.ring-1]="modality() === 'studio'"
+                      [class.ring-primary]="modality() === 'studio'"
+                      (click)="modality.set('studio')"
                     >
                       <span class="material-symbols-outlined text-2xl text-primary">storefront</span>
                       <p class="text-on-surface mt-2">En el estudio</p>
@@ -259,12 +265,14 @@ interface BookingState {
                       type="button"
                       class="p-5 rounded-2xl text-left transition-all
                              bg-surface-container hover:bg-surface-container-high"
-                      [class.bg-surface-container-high]="state().modality === 'domicilio'"
-                      [class.ring-1]="state().modality === 'domicilio'"
-                      [class.ring-primary]="state().modality === 'domicilio'"
-                      (click)="setModality('domicilio')"
+                      [class.bg-surface-container-high]="modality() === 'domicilio'"
+                      [class.ring-1]="modality() === 'domicilio'"
+                      [class.ring-primary]="modality() === 'domicilio'"
+                      (click)="modality.set('domicilio')"
                     >
-                      <span class="material-symbols-outlined text-2xl text-primary">directions_car</span>
+                      <span class="material-symbols-outlined text-2xl text-primary">
+                        directions_car
+                      </span>
                       <p class="text-on-surface mt-2">A domicilio</p>
                       <p class="text-sm text-on-surface-variant">
                         Puebla capital, Cholula y alrededores. Viáticos según distancia.
@@ -280,7 +288,6 @@ interface BookingState {
               <div class="space-y-6">
                 <h2 class="text-xl text-on-surface">Fecha &amp; Hora</h2>
 
-                <!-- Cinta de fechas -->
                 <div>
                   <p class="label-md text-outline mb-3">Elige el día</p>
                   <div class="flex gap-3 overflow-x-auto pb-2">
@@ -289,10 +296,10 @@ interface BookingState {
                         type="button"
                         class="shrink-0 w-20 py-3 rounded-2xl text-center transition-all
                                bg-surface-container hover:bg-surface-container-high"
-                        [class.bg-primary]="state().date?.toISOString() === day.iso"
-                        [class.text-on-primary]="state().date?.toISOString() === day.iso"
-                        [class.bg-surface-container-highest]="state().date?.toISOString() !== day.iso"
-                        (click)="selectDate(day.date)"
+                        [class.bg-primary]="selectedDate()?.iso === day.iso"
+                        [class.text-on-primary]="selectedDate()?.iso === day.iso"
+                        [class.bg-surface-container-highest]="selectedDate()?.iso !== day.iso"
+                        (click)="selectDate(day)"
                       >
                         <span class="label-sm block opacity-80">{{ day.weekday }}</span>
                         <span class="text-lg block mt-1">{{ day.dayNumber }}</span>
@@ -302,29 +309,37 @@ interface BookingState {
                   </div>
                 </div>
 
-                <!-- Horarios -->
-                @if (state().date) {
+                @if (selectedDate()) {
                   <div>
                     <p class="label-md text-outline mb-3">Horarios disponibles</p>
-                    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      @for (slot of timeSlots(); track slot.time) {
-                        <button
-                          type="button"
-                          class="py-2.5 px-3 rounded-xl text-center label-sm transition-all
-                                 bg-surface-container text-on-surface
-                                 hover:bg-primary hover:text-on-primary"
-                          [class.bg-primary]="state().timeSlot === slot.time"
-                          [class.text-on-primary]="state().timeSlot === slot.time"
-                          (click)="state.update((s) => ({ ...s, timeSlot: slot.time }))"
-                        >
-                          {{ slot.label }}
-                        </button>
-                      } @empty {
-                        <p class="col-span-full text-sm text-on-surface-variant py-4">
-                          No quedan horarios libres este día. Prueba con otra fecha.
-                        </p>
-                      }
-                    </div>
+
+                    @if (loadingSlots()) {
+                      <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+                          <div class="h-11 rounded-xl bg-surface-container animate-pulse"></div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        @for (slot of slots(); track slot.startsAt) {
+                          <button
+                            type="button"
+                            class="py-2.5 px-3 rounded-xl text-center label-sm transition-all
+                                   bg-surface-container text-on-surface
+                                   hover:bg-primary hover:text-on-primary"
+                            [class.bg-primary]="selectedSlot()?.startsAt === slot.startsAt"
+                            [class.text-on-primary]="selectedSlot()?.startsAt === slot.startsAt"
+                            (click)="selectSlot(slot)"
+                          >
+                            {{ formatTime(str(slot.startsAt)) }}
+                          </button>
+                        } @empty {
+                          <p class="col-span-full text-sm text-on-surface-variant py-4">
+                            No quedan horarios libres este día. Prueba con otra fecha.
+                          </p>
+                        }
+                      </div>
+                    }
                   </div>
                 } @else {
                   <p class="text-sm text-on-surface-variant">
@@ -335,8 +350,8 @@ interface BookingState {
                 <div class="p-3 rounded-xl bg-surface-container-lowest/80 flex items-start gap-2.5">
                   <span class="material-symbols-outlined text-primary text-base mt-0.5">lock</span>
                   <p class="text-sm text-on-surface-variant leading-snug">
-                    Anticipo del 30% requerido para bloquear agenda en Puebla Studio. Reagenda
-                    flexible hasta 24h previas.
+                    Anticipo del 30% requerido para bloquear agenda. Reagenda flexible hasta
+                    24h previas.
                   </p>
                 </div>
               </div>
@@ -344,7 +359,7 @@ interface BookingState {
 
             <!-- PASO 4: Confirmación -->
             @if (currentStep() === 4) {
-              @if (confirmed()) {
+              @if (confirmed(); as booking) {
                 <div class="card-glass p-8 text-center space-y-5">
                   <div
                     class="w-16 h-16 rounded-full bg-primary/20 text-primary
@@ -359,33 +374,51 @@ interface BookingState {
                   </p>
 
                   <div class="p-5 rounded-2xl bg-surface-container text-left space-y-3">
-                    <div class="flex justify-between">
+                    <div class="flex justify-between gap-4">
                       <span class="label-sm text-outline">Folio</span>
-                      <span class="text-on-surface">{{ confirmationCode() }}</span>
+                      <span class="text-on-surface">{{ booking.code }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between gap-4">
                       <span class="label-sm text-outline">Servicio</span>
-                      <span class="text-on-surface text-right">{{ selectedService()?.name }}</span>
+                      <span class="text-on-surface text-right">
+                        {{ selectedService()?.service?.name }}
+                      </span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between gap-4">
                       <span class="label-sm text-outline">Fecha</span>
-                      <span class="text-on-surface">{{ formatDate(state().date) }}</span>
+                      <span class="text-on-surface">{{ formatSelectedDate() }}</span>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                      <span class="label-sm text-outline">Hora</span>
+                      <span class="text-on-surface">
+                        {{ selectedSlot() ? formatTime(str(selectedSlot()!.startsAt)) : '—' }}
+                      </span>
+                    </div>
+                    <div class="flex justify-between gap-4">
+                      <span class="label-sm text-outline">Modalidad</span>
+                      <span class="text-on-surface">
+                        {{ modality() === 'studio' ? 'En el estudio' : 'A domicilio' }}
+                      </span>
+                    </div>
+                    <div
+                      class="flex justify-between pt-3 border-t border-surface-variant"
+                    >
+                      <span class="label-sm text-outline">Anticipo a pagar</span>
+                      <span class="text-xl text-primary">
+                        {{ formatPrice(num(booking.depositAmount)) }}
+                      </span>
                     </div>
                     <div class="flex justify-between">
-                      <span class="label-sm text-outline">Hora</span>
-                      <span class="text-on-primary">{{ state().timeSlot }}</span>
-                    </div>
-                    <div class="flex justify-between pt-3 border-t border-surface-variant">
-                      <span class="label-sm text-outline">Anticipo a pagar</span>
-                      <span class="text-xl text-primary">{{ formatPrice(deposit()) }}</span>
+                      <span class="label-sm text-outline">Saldo el día del servicio</span>
+                      <span class="text-on-surface">{{ formatPrice(num(booking.balanceAmount)) }}</span>
                     </div>
                   </div>
 
                   <div class="flex flex-wrap justify-center gap-4 pt-2">
                     <a routerLink="/" class="btn-ghost">Volver al inicio</a>
-                    <a [href]="whatsappLink()" target="_blank" rel="noopener" class="btn-primary">
+                    <a [href]="whatsappLink(str(booking.code))" target="_blank" rel="noopener" class="btn-primary">
                       <span class="material-symbols-outlined text-xl">chat</span>
-                      Continuar por WhatsApp
+                      Confirmar por WhatsApp
                     </a>
                   </div>
                 </div>
@@ -399,10 +432,11 @@ interface BookingState {
                       <input
                         id="name"
                         type="text"
+                        autocomplete="name"
                         class="input-dark"
                         placeholder="Tu nombre"
-                        [value]="state().name"
-                        (input)="patch({ name: $any($event.target).value })"
+                        [value]="contactName()"
+                        (input)="contactName.set($any($event.target).value)"
                       />
                     </div>
 
@@ -412,10 +446,11 @@ interface BookingState {
                         <input
                           id="phone"
                           type="tel"
+                          autocomplete="tel"
                           class="input-dark"
                           placeholder="+52 222 000 0000"
-                          [value]="state().phone"
-                          (input)="patch({ phone: $any($event.target).value })"
+                          [value]="contactPhone()"
+                          (input)="contactPhone.set($any($event.target).value)"
                         />
                       </div>
                       <div class="space-y-2">
@@ -423,10 +458,11 @@ interface BookingState {
                         <input
                           id="email"
                           type="email"
+                          autocomplete="email"
                           class="input-dark"
                           placeholder="tu@correo.com"
-                          [value]="state().email"
-                          (input)="patch({ email: $any($event.target).value })"
+                          [value]="contactEmail()"
+                          (input)="contactEmail.set($any($event.target).value)"
                         />
                       </div>
                     </div>
@@ -440,22 +476,29 @@ interface BookingState {
                         rows="4"
                         class="input-dark resize-none"
                         placeholder="Alergias, tipo de piel, estilo deseado…"
-                        [value]="state().notes"
-                        (input)="patch({ notes: $any($event.target).value })"
+                        [value]="notes()"
+                        (input)="notes.set($any($event.target).value)"
                       ></textarea>
                     </div>
                   </div>
 
                   @if (error()) {
-                    <p class="text-sm text-error flex items-center gap-2">
-                      <span class="material-symbols-outlined text-base">error</span>
-                      {{ error() }}
+                    <p class="text-sm text-error flex items-start gap-2">
+                      <span class="material-symbols-outlined text-base mt-0.5">error</span>
+                      <span>{{ error() }}</span>
                     </p>
                   }
 
-                  <button type="button" class="btn-primary w-full" (click)="confirm()">
-                    <span class="material-symbols-outlined text-xl">event_available</span>
-                    Solicitar Mi Cita
+                  <button
+                    type="button"
+                    class="btn-primary w-full"
+                    [disabled]="submitting()"
+                    (click)="confirm()"
+                  >
+                    <span class="material-symbols-outlined text-xl">
+                      {{ submitting() ? 'hourglass_top' : 'event_available' }}
+                    </span>
+                    {{ submitting() ? 'Registrando…' : 'Solicitar Mi Cita' }}
                   </button>
 
                   <p class="text-xs text-outline text-center leading-relaxed">
@@ -468,13 +511,15 @@ interface BookingState {
 
             <!-- Navegación entre pasos -->
             @if (!confirmed()) {
-              <div class="flex items-center justify-between gap-4 pt-8 mt-8 border-t border-surface-variant">
+              <div
+                class="flex items-center justify-between gap-4 pt-8 mt-8
+                       border-t border-surface-variant"
+              >
                 <button
                   type="button"
                   class="btn-ghost"
                   [disabled]="currentStep() === 1"
                   [class.opacity-40]="currentStep() === 1"
-                  [class.cursor-not-allowed]="currentStep() === 1"
                   (click)="previousStep()"
                 >
                   <span class="material-symbols-outlined text-base">arrow_back</span>
@@ -487,7 +532,6 @@ interface BookingState {
                     class="btn-primary"
                     [disabled]="!canAdvance()"
                     [class.opacity-50]="!canAdvance()"
-                    (class.cursor-not-allowed)="!canAdvance()"
                     (click)="nextStep()"
                   >
                     {{ advanceLabel() }}
@@ -500,7 +544,10 @@ interface BookingState {
 
           <!-- Panel de resumen -->
           <aside class="lg:col-span-4 lg:sticky lg:top-28 space-y-6">
-            <div class="p-6 rounded-3xl bg-surface-container-high/95 backdrop-blur-xl shadow-2xl space-y-6">
+            <div
+              class="p-6 rounded-3xl bg-surface-container-high/95 backdrop-blur-xl
+                     shadow-2xl space-y-6"
+            >
               <div class="flex items-center justify-between pb-4 border-b border-surface-variant">
                 <div>
                   <span class="label-sm text-primary">Detalle de Solicitud</span>
@@ -516,79 +563,53 @@ interface BookingState {
 
               <div class="flex items-center gap-3.5 p-3 rounded-2xl bg-surface-container">
                 <div
-                  class="w-12 h-12 rounded-full bg-gradient-to-br from-primary
-                         to-primary-container flex items-center justify-center
-                         text-on-primary shrink-0"
+                  class="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-container
+                         flex items-center justify-center text-on-primary shrink-0"
                 >
                   <span class="material-symbols-outlined text-2xl">person</span>
                 </div>
                 <div>
-                  <p class="label-md font-semibold text-on-surface">Andy • Master Artist</p>
-                  <p class="label-sm text-outline">Cosmetóloga &amp; Estilista Titulada</p>
+                  <p class="label-md font-semibold text-on-surface">
+                    {{ specialist()?.name ?? 'Andy • Master Artist' }}
+                  </p>
+                  <p class="label-sm text-outline">
+                    {{ specialist()?.title ?? 'Cosmetóloga & Estilista Titulada' }}
+                  </p>
                 </div>
               </div>
 
-              <!-- Servicio seleccionado -->
-              <div class="space-y-3">
-                <p class="label-sm text-outline">Servicio Seleccionado</p>
-                @if (selectedService(); as service) {
+              @if (selectedService(); as service) {
+                <div class="space-y-3">
+                  <p class="label-sm text-outline">Servicio Seleccionado</p>
                   <div class="p-4 rounded-xl bg-surface-container-highest space-y-2">
                     <div class="flex justify-between items-start gap-3">
-                      <span class="label-lg text-on-surface font-bold">{{ service.name }}</span>
+                      <span class="label-lg text-on-surface font-bold">
+                        {{ str(service.service?.name) }}
+                      </span>
                       <span class="text-xl text-primary shrink-0">
-                        {{ formatPrice(service.price) }}
+                        {{ formatPrice(num(service.service?.price)) }}
                       </span>
                     </div>
                     <div class="flex items-center gap-2 text-on-surface-variant label-sm">
                       <span class="material-symbols-outlined text-sm text-primary">timelapse</span>
-                      {{ service.durationMinutes }} min de sesión
+                      {{ availability()?.durationMinutes ?? num(service.service?.durationMinutes) }} min
+                      de sesión
                     </div>
                   </div>
-                } @else {
-                  <div
-                    class="p-4 rounded-xl bg-surface-container text-center
-                           text-on-surface-variant text-sm"
-                  >
-                    Haz clic en cualquiera de los servicios para continuar.
+                </div>
+
+                @if (selectedAddons().length > 0) {
+                  <div class="space-y-2">
+                    <p class="label-sm text-outline">Complementos</p>
+                    @for (addon of selectedAddons(); track num(addon.id)) {
+                      <div class="flex justify-between items-center gap-3 text-sm">
+                        <span class="text-on-surface-variant">{{ str(addon.name) }}</span>
+                        <span class="text-primary shrink-0">+{{ formatPrice(num(addon.price)) }}</span>
+                      </div>
+                    }
                   </div>
                 }
-              </div>
 
-              <!-- Complementos -->
-              @if (selectedAddons().length > 0) {
-                <div class="space-y-2">
-                  <p class="label-sm text-outline">Complementos</p>
-                  @for (addon of selectedAddons(); track addon.id) {
-                    <div class="flex justify-between items-center gap-3 text-sm">
-                      <span class="text-on-surface-variant">{{ addon.name }}</span>
-                      <span class="text-primary shrink-0">
-                        +{{ formatPrice(addon.price) }}
-                      </span>
-                    </div>
-                  }
-                </div>
-              }
-
-              <!-- Fecha y hora -->
-              @if (state().date) {
-                <div class="space-y-2">
-                  <p class="label-sm text-outline">Tu cita</p>
-                  <div
-                    class="p-3 rounded-xl bg-surface-container flex items-center gap-3"
-                  >
-                    <span class="material-symbols-outlined text-primary">event</span>
-                    <span class="text-sm text-on-surface">
-                      {{ formatDate(state().date) }}
-                      @if (state().timeSlot) {
-                        · {{ state().timeSlot }}
-                      }
-                    </span>
-                  </div>
-                </div>
-              }
-
-              <!-- Totales -->
-              @if (selectedService(); as service) {
                 <div class="pt-4 border-t border-surface-variant space-y-2">
                   <div class="flex justify-between text-sm">
                     <span class="text-on-surface-variant">Total</span>
@@ -598,6 +619,17 @@ interface BookingState {
                     <span class="text-on-surface-variant">Anticipo (30%)</span>
                     <span class="text-primary">{{ formatPrice(deposit()) }}</span>
                   </div>
+                  <div class="flex justify-between text-sm">
+                    <span class="text-on-surface-variant">Saldo</span>
+                    <span class="text-on-surface-variant">{{ formatPrice(total() - deposit()) }}</span>
+                  </div>
+                </div>
+              } @else {
+                <div
+                  class="p-4 rounded-xl bg-surface-container text-center
+                         text-on-surface-variant text-sm"
+                >
+                  Haz clic en cualquiera de los servicios para continuar.
                 </div>
               }
 
@@ -616,6 +648,19 @@ interface BookingState {
   `,
 })
 export class BookingWizardComponent {
+  private readonly bookingService = inject(BookingService);
+  private readonly catalog = inject(CourseService);
+
+  /**
+   * Lectura defensiva de números del contrato generado.
+   *
+   * Angular solo expone a la plantilla los miembros de la clase, no los
+   * imports de módulo, así que el helper se asigna aquí como campo
+   * protegido. Ver num() en booking.service.ts para el porqué.
+   */
+  protected readonly num = num;
+  protected readonly str = str;
+
   protected readonly steps = [
     { number: 1, caption: 'Paso Uno', title: 'Elige Servicio' },
     { number: 2, caption: 'Paso Dos', title: 'Especialista Andy' },
@@ -623,246 +668,140 @@ export class BookingWizardComponent {
     { number: 4, caption: 'Paso Cuatro', title: 'Confirmación VIP' },
   ];
 
-  // Migrado de studioData.ts (STUDIO_SERVICES + ADD_ONS).
-  protected readonly services: (BookableService & { preparation: string })[] = [
-    {
-      id: 1,
-      name: 'Maquillaje Profesional',
-      tag: 'Social & Novias',
-      price: 1850,
-      durationMinutes: 90,
-      badge: 'Piel Blindada',
-      description:
-        'Técnica de piel blindada a prueba de agua y lágrimas, visagismo, pestañas 3D de visón personalizadas y ampolleta flash tensora. Ideal para bodas, XV años y galas.',
-      preparation:
-        'Acudir con el rostro limpio, sin crema pesada ni bloqueador grasoso. Evitar exfoliaciones agresivas 48 horas previas.',
-    },
-    {
-      id: 2,
-      name: 'Peinado de Gala & Novias',
-      tag: 'Estilismo',
-      price: 1200,
-      durationMinutes: 60,
-      badge: 'Fijación Flexible',
-      description:
-        'Ondas al agua estilo Hollywood, recogidos estructurados y peinados bohemios con protección térmica y sellado de brillo duradero sin rigidez.',
-      preparation:
-        'Cabello lavado 2 a 3 horas antes con shampoo neutro, 100% seco al momento de iniciar y sin aceites ni cremas para peinar.',
-    },
-    {
-      id: 3,
-      name: 'Nail Arts & Estructuras',
-      tag: 'Manicura',
-      price: 850,
-      durationMinutes: 75,
-      badge: 'Manicura Rusa',
-      description:
-        'Manicura rusa estética con torno, diseño artístico a mano alzada, esmaltado semipermanente de larga duración, Soft Gel o acrílico fino con cristales Swarovski.',
-      preparation:
-        'Si requieres retiro de producto acrílico previo, agrégalo en los complementos para garantizar el tiempo de sesión adecuado.',
-    },
-    {
-      id: 4,
-      name: 'Extensiones de Cabello Premium',
-      tag: '100% Humano',
-      price: 3500,
-      durationMinutes: 120,
-      badge: 'Punto Invisible',
-      description:
-        'Aplicación profesional de cabello 100% virgen con técnica invisible (nanoring, microrings o punto invisible). Cero tracción, máxima ligereza y adaptación tonal.',
-      preparation:
-        'Cabello limpio y desenredado. Se sugiere valoración previa para determinar el gramaje y largo ideal (18", 22" o 26").',
-    },
-    {
-      id: 5,
-      name: 'Cursos Personalizados 1 a 1',
-      tag: 'Certificación',
-      price: 2800,
-      durationMinutes: 180,
-      badge: 'Academia VIP',
-      description:
-        'Masterclasses individuales de Automaquillaje, Perfeccionamiento de Técnicas para profesionales y Formación en Nail Art. Incluye manual teórico y diploma oficial.',
-      preparation:
-        'Para automaquillaje, puedes traer tu cosmetiquera actual para evaluar tus productos. Todos los materiales de cabina están incluidos.',
-    },
-  ];
-
-  protected readonly addons: AddOn[] = [
-    {
-      id: 'addon-ampolleta',
-      name: 'Ampolleta Flash Tensora Anti-Fatiga',
-      price: 250,
-      extraMinutes: 10,
-      description: 'Concentrado dermocosmético tensor con péptidos y ácido hialurónico.',
-    },
-    {
-      id: 'addon-cejas',
-      name: 'Diseño y Laminado Express de Ceja',
-      price: 200,
-      extraMinutes: 15,
-      description: 'Perfilado con hilo orgánico y fijación semipermanente de textura pulida.',
-    },
-    {
-      id: 'addon-labios',
-      name: 'Tratamiento Labios de Seda & Exfoliación',
-      price: 180,
-      extraMinutes: 10,
-      description: 'Exfoliación con microgránulos botánicos y mascarilla selladora de colágeno.',
-    },
-    {
-      id: 'addon-retiro',
-      name: 'Retiro Suave de Gel o Acrílico Previo',
-      price: 150,
-      extraMinutes: 20,
-      description: 'Eliminación segura sin limado excesivo para preservar la salud de la uña.',
-    },
-  ];
-
   protected readonly currentStep = signal(1);
-  protected readonly confirmed = signal(false);
+  protected readonly loadingServices = signal(true);
+  protected readonly loadingSlots = signal(false);
+  protected readonly submitting = signal(false);
   protected readonly error = signal('');
-  protected readonly confirmationCode = signal('');
+  protected readonly confirmed = signal<Booking | null>(null);
 
-  protected readonly state = signal<BookingState>({
-    serviceId: null,
-    addonIds: [],
-    date: null,
-    timeSlot: null,
-    modality: 'studio',
-    name: '',
-    phone: '',
-    email: '',
-    notes: '',
-  });
+  protected readonly services = signal<ServiceWithAddOns[]>([]);
+  protected readonly selectedService = signal<ServiceWithAddOns | null>(null);
+  protected readonly selectedAddonIds = signal<number[]>([]);
+  protected readonly specialist = signal<Specialist | null>(null);
 
-  protected readonly selectedService = computed(() => {
-    const id = this.state().serviceId;
-    return this.services.find((s) => s.id === id);
-  });
+  protected readonly selectedDate = signal<DayOption | null>(null);
+  protected readonly slots = signal<AvailabilitySlot[]>([]);
+  protected readonly selectedSlot = signal<AvailabilitySlot | null>(null);
+  protected readonly availability = signal<AvailabilityResponse | null>(null);
+
+  protected readonly modality = signal<'studio' | 'domicilio'>('studio');
+  protected readonly contactName = signal('');
+  protected readonly contactPhone = signal('');
+  protected readonly contactEmail = signal('');
+  protected readonly notes = signal('');
 
   protected readonly selectedAddons = computed(() =>
-    this.state().addonIds
-      .map((id) => this.addons.find((a) => a.id === id))
-      .filter((a): a is AddOn => a !== undefined)
+    this.selectedAddonIds()
+      .map((id) =>
+        this.selectedService()?.addOns?.find((a: AddOn) => num(a.id) === id),
+      )
+      .filter((a): a is AddOn => a !== undefined),
   );
 
   protected readonly total = computed(() => {
     const service = this.selectedService();
-    if (!service) return 0;
-    return service.price + this.selectedAddons().reduce((sum, a) => sum + a.price, 0);
+    if (!service?.service) return 0;
+    return num(service.service?.price) + this.selectedAddons().reduce((s, a) => s + num(a.price), 0);
   });
 
-  protected readonly deposit = computed(() => Math.round(this.total() * 0.3));
+  protected readonly deposit = computed(() => Math.round(this.total() * 0.3 * 100) / 100);
 
-  protected readonly availableDays = computed(() => {
-    const days: { date: Date; iso: string; weekday: string; dayNumber: number; month: string }[] =
-      [];
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
+  constructor() {
+    this.catalog.getServices().subscribe({
+      next: (services) => {
+        this.services.set(services);
+        this.loadingServices.set(false);
+      },
+      error: () => {
+        this.error.set('No se pudo conectar con el servidor. Revisa que la API esté corriendo.');
+        this.loadingServices.set(false);
+      },
+    });
 
-    // Lun–Sáb, seis días de agenda.
-    for (let i = 0; i < 14; i++) {
-      const date = new Date(start);
-      date.setDate(start.getDate() + i);
-      const weekdayIndex = date.getDay();
-      if (weekdayIndex === 0) continue; // domingo cerrado
-
-      days.push({
-        date,
-        iso: date.toISOString().slice(0, 10),
-        weekday: new Intl.DateTimeFormat('es-MX', { weekday: 'short' })
-          .format(date)
-          .replace('.', '')
-          .toUpperCase(),
-        dayNumber: date.getDate(),
-        month: new Intl.DateTimeFormat('es-MX', { month: 'short' })
-          .format(date)
-          .replace('.', '')
-          .toUpperCase(),
-      });
-    }
-    return days;
-  });
-
-  /** Horarios base del estudio. La lógica real de ocupación llega con /api/availability. */
-  protected readonly timeSlots = computed(() => {
-    if (!this.state().date) return [];
-    const isSaturday = this.state().date!.getDay() === 6;
-
-    const base = [
-      { time: '10:00', label: '10:00 AM' },
-      { time: '11:30', label: '11:30 AM' },
-      { time: '13:30', label: '01:30 PM' },
-      { time: '15:00', label: '03:00 PM' },
-      { time: '16:30', label: '04:30 PM' },
-      { time: '18:00', label: '06:00 PM' },
-    ];
-
-    // El sábado cierra antes.
-    return isSaturday ? base.slice(0, 5) : base;
-  });
-
-  protected readonly whatsappLink = computed(() => {
-    const service = this.selectedService();
-    const message = service
-      ? `¡Hola Andy! Deseo formalizar mi cita para: ${service.name} (${service.durationMinutes} min - ${this.formatPrice(service.price)} MXN) en Puebla Studio.`
-      : '¡Hola Andy! Deseo información sobre servicios y cursos.';
-    return `https://wa.me/522221234567?text=${encodeURIComponent(message)}`;
-  });
-
-  protected serviceSupportsAddons(serviceId: number): boolean {
-    return [1, 2, 3].includes(serviceId);
+    this.catalog.getSpecialists().subscribe({
+      next: (list) => this.specialist.set(list[0] ?? null),
+      error: () => {
+        // No es crítico: el panel ya tiene un nombre por defecto.
+      },
+    });
   }
 
-  protected selectService(serviceId: number): void {
-    this.state.update((s) => ({
-      ...s,
-      serviceId: serviceId,
-      // Al cambiar de servicio se limpian complementos no aplicables y el horario.
-      addonIds: this.serviceSupportsAddons(serviceId) ? s.addonIds : [],
-      timeSlot: null,
-    }));
-  }
+  // ------------------------------------------------------------------
+  // Selección
+  // ------------------------------------------------------------------
 
-  protected toggleAddon(addonId: string): void {
-    this.state.update((s) => ({
-      ...s,
-      addonIds: s.addonIds.includes(addonId)
-        ? s.addonIds.filter((id) => id !== addonId)
-        : [...s.addonIds, addonId],
-    }));
-  }
-
-  protected selectDate(date: Date): void {
-    this.state.update((s) => ({ ...s, date, timeSlot: null }));
-  }
-
-  protected setModality(modality: 'studio' | 'domicilio'): void {
-    this.state.update((s) => ({ ...s, modality }));
-  }
-
-  protected patch(partial: Partial<BookingState>): void {
-    this.state.update((s) => ({ ...s, ...partial }));
+  protected selectService(service: ServiceWithAddOns): void {
+    this.selectedService.set(service);
+    this.selectedAddonIds.set([]);
+    this.selectedSlot.set(null);
     this.error.set('');
   }
 
+  protected toggleAddon(addonId: number): void {
+    this.selectedAddonIds.update((ids) =>
+      ids.includes(addonId) ? ids.filter((id) => id !== addonId) : [...ids, addonId],
+    );
+
+    // Los complementos alargan la sesión, así que los horarios ya no
+    // sirven: hay que volver a preguntarlos.
+    this.selectedSlot.set(null);
+    this.slots.set([]);
+  }
+
+  protected selectDate(day: DayOption): void {
+    this.selectedDate.set(day);
+    this.selectedSlot.set(null);
+    this.error.set('');
+    this.loadSlots(day);
+  }
+
+  protected selectSlot(slot: AvailabilitySlot): void {
+    this.selectedSlot.set(slot);
+    this.error.set('');
+  }
+
+  private loadSlots(day: DayOption): void {
+    const service = this.selectedService();
+    if (!service?.service?.id) return;
+
+    this.loadingSlots.set(true);
+
+    this.bookingService
+      .getAvailability(day.date, num(service.service?.id), this.selectedAddonIds())
+      .subscribe({
+        next: (response) => {
+          this.slots.set(response.slots ?? []);
+          this.availability.set(response);
+          this.loadingSlots.set(false);
+        },
+        error: () => {
+          this.slots.set([]);
+          this.error.set('No se pudieron cargar los horarios. Intenta de nuevo.');
+          this.loadingSlots.set(false);
+        },
+      });
+  }
+
+  // ------------------------------------------------------------------
+  // Navegación
+  // ------------------------------------------------------------------
+
   protected canGoTo(step: number): boolean {
     if (step === 1) return true;
-    if (step === 2) return this.state().serviceId !== null;
-    if (step === 3) return this.state().serviceId !== null;
-    return this.state().timeSlot !== null;
+    if (!this.selectedService()) return false;
+    if (step === 3) return true;
+    return this.selectedSlot() !== null;
   }
 
   protected canAdvance(): boolean {
     switch (this.currentStep()) {
       case 1:
-        return this.state().serviceId !== null;
+        return this.selectedService() !== null;
       case 2:
         return true;
       case 3:
-        return this.state().date !== null && this.state().timeSlot !== null;
-      case 4:
-        return false;
+        return this.selectedSlot() !== null;
       default:
         return false;
     }
@@ -882,57 +821,165 @@ export class BookingWizardComponent {
   }
 
   protected nextStep(): void {
-    if (this.canAdvance() && this.currentStep() < 4) {
-      this.currentStep.update((n) => n + 1);
-    }
+    if (!this.canAdvance() || this.currentStep() >= 4) return;
+    this.currentStep.update((n) => n + 1);
   }
 
   protected previousStep(): void {
-    if (this.currentStep() > 1) {
-      this.currentStep.update((n) => n - 1);
-    }
+    if (this.currentStep() > 1) this.currentStep.update((n) => n - 1);
   }
 
   protected goToStep(step: number): void {
-    if (this.canGoTo(step)) {
-      this.currentStep.set(step);
-    }
+    if (this.canGoTo(step)) this.currentStep.set(step);
   }
+
+  // ------------------------------------------------------------------
+  // Confirmación
+  // ------------------------------------------------------------------
 
   protected confirm(): void {
     this.error.set('');
-    const s = this.state();
 
-    if (s.name.trim().length < 3) {
+    const service = this.selectedService();
+    const slot = this.selectedSlot();
+
+    if (!service?.service?.id || !slot) {
+      this.error.set('Falta el servicio o el horario.');
+      return;
+    }
+    if (this.contactName().trim().length < 3) {
       this.error.set('Escribe tu nombre completo.');
       return;
     }
-    if (s.phone.replace(/\D/g, '').length < 10) {
+    if (this.contactPhone().replace(/\D/g, '').length < 10) {
       this.error.set('Escribe un número de WhatsApp válido con lada.');
       return;
     }
-    if (!s.email.includes('@')) {
+    if (!this.contactEmail().includes('@')) {
       this.error.set('Escribe un correo válido para confirmar tu cita.');
       return;
     }
 
-    // TODO: sustituir por POST /api/bookings en feature/booking.
-    const code = `ANDY-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    this.confirmationCode.set(code);
-    this.confirmed.set(true);
+    this.submitting.set(true);
+
+    this.bookingService
+      .createBooking({
+        specialistId: this.availability()?.specialistId ?? 1,
+        startsAt: slot.startsAt,
+        contactName: this.contactName().trim(),
+        contactPhone: this.contactPhone().trim(),
+        contactEmail: this.contactEmail().trim(),
+        serviceId: num(service.service?.id),
+        addOnIds: this.selectedAddonIds(),
+        modality: this.modality(),
+        notes: this.notes().trim() || null,
+      })
+      .subscribe({
+        next: (booking) => {
+          this.confirmed.set(booking);
+          this.submitting.set(false);
+        },
+        error: (err: unknown) => {
+          this.submitting.set(false);
+
+          if (err instanceof SlotConflictError) {
+            // El horario se tomó entre elegirlo y confirmar. Se ofrecen
+            // los que quedan en vez de un error: la clienta puede
+            // reintentar sin recargar.
+            this.error.set(err.message);
+            this.slots.set(err.alternatives);
+            this.selectedSlot.set(null);
+            this.currentStep.set(3);
+            return;
+          }
+
+          if (err instanceof HttpErrorResponse) {
+            const message = (err.error as { message?: string })?.message;
+            this.error.set(message ?? 'No se pudo registrar tu cita. Intenta de nuevo.');
+            return;
+          }
+
+          this.error.set('Ocurrió un error inesperado. Intenta de nuevo.');
+        },
+      });
   }
 
-  protected formatPrice(value: number): string {
-    return `$${value.toLocaleString('es-MX')} MXN`;
+  // ------------------------------------------------------------------
+  // Formato
+  // ------------------------------------------------------------------
+
+  protected readonly availableDays = computed<DayOption[]>(() => {
+    const days: DayOption[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 14 días Laborables hacia adelante. El rango viene de que
+    // working_hours no define domingo.
+    for (let i = 0; i < 21; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      if (date.getDay() === 0) continue;
+
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const dayNumber = String(date.getDate()).padStart(2, '0');
+
+      days.push({
+        date,
+        iso: `${year}-${month}-${dayNumber}`,
+        weekday: new Intl.DateTimeFormat('es-MX', { weekday: 'short' })
+          .format(date)
+          .replace('.', '')
+          .toUpperCase(),
+        dayNumber: date.getDate(),
+        month: new Intl.DateTimeFormat('es-MX', { month: 'short' })
+          .format(date)
+          .replace('.', '')
+          .toUpperCase(),
+      });
+    }
+
+    return days;
+  });
+
+  protected formatPrice(value: number | undefined): string {
+    return `$${(value ?? 0).toLocaleString('es-MX')} MXN`;
   }
 
-  protected formatDate(date: Date | null): string {
-    if (!date) return '—';
+  /** Horario en la hora de Puebla, no en UTC. */
+  protected formatTime(iso: string): string {
+    return new Intl.DateTimeFormat('es-MX', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'America/Mexico_City',
+    }).format(new Date(iso));
+  }
+
+  protected formatSelectedDate(): string {
+    const day = this.selectedDate();
+    if (!day) return '—';
     return new Intl.DateTimeFormat('es-MX', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    }).format(date);
+    }).format(day.date);
   }
+
+  protected whatsappLink(code: string): string {
+    const message =
+      `¡Hola Andy! Confirmo mi cita ${code} — ` +
+      `${this.selectedService()?.service?.name ?? ''} ` +
+      `${this.formatSelectedDate()}`;
+    return `https://wa.me/522221234567?text=${encodeURIComponent(message)}`;
+  }
+}
+
+interface DayOption {
+  date: Date;
+  iso: string;
+  weekday: string;
+  dayNumber: number;
+  month: string;
 }

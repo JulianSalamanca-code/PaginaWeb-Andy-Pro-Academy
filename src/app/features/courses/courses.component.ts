@@ -1,6 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CourseService } from '../../core/services/course.service';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Course, CourseService } from '../../core/services/course.service';
 
 @Component({
   selector: 'app-courses',
@@ -58,9 +59,7 @@ import { CourseService } from '../../core/services/course.service';
               <div class="lg:col-span-7 space-y-4">
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-2xl text-on-surface">{{ course.title }}</h2>
-                  <span
-                    class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary label-sm"
-                  >
+                  <span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary label-sm">
                     {{ course.tag }}
                   </span>
                 </div>
@@ -69,57 +68,58 @@ import { CourseService } from '../../core/services/course.service';
                   {{ course.description }}
                 </p>
 
-                <!-- Temario -->
-                <div class="space-y-2">
-                  <h3 class="label-md text-primary">Temario</h3>
-                  <ul class="space-y-1.5">
-                    @for (topic of course.topics; track topic) {
-                      <li class="flex items-start gap-2.5 text-sm text-on-surface-variant">
-                        <span
-                          class="material-symbols-outlined text-primary text-base mt-0.5
-                                 shrink-0"
-                        >
-                          check
-                        </span>
-                        {{ topic }}
-                      </li>
-                    }
-                  </ul>
-                </div>
+                @if (course.topics?.length) {
+                  <div class="space-y-2">
+                    <h3 class="label-md text-primary">Temario</h3>
+                    <ul class="space-y-1.5">
+                      @for (topic of course.topics; track topic) {
+                        <li class="flex items-start gap-2.5 text-sm text-on-surface-variant">
+                          <span
+                            class="material-symbols-outlined text-primary text-base mt-0.5 shrink-0"
+                          >
+                            check
+                          </span>
+                          {{ topic }}
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
               </div>
 
               <aside class="lg:col-span-5 space-y-5">
                 <dl class="space-y-3 p-5 rounded-2xl bg-surface-container">
-                  <div class="flex items-center justify-between">
+                  <div class="flex items-center justify-between gap-4">
                     <dt class="label-sm text-outline">Duración</dt>
-                    <dd class="text-sm text-on-surface text-right">{{ course.duration }}</dd>
+                    <dd class="text-sm text-on-surface text-right">{{ course.durationLabel }}</dd>
                   </div>
-                  <div class="flex items-center justify-between">
+                  <div class="flex items-center justify-between gap-4">
                     <dt class="label-sm text-outline">Nivel</dt>
                     <dd class="text-sm text-on-surface text-right">{{ course.level }}</dd>
                   </div>
-                  <div class="flex items-center justify-between">
+                  <div class="flex items-center justify-between gap-4">
                     <dt class="label-sm text-outline">Sesiones</dt>
-                    <dd class="text-sm text-on-surface text-right">{{ course.sessions }}</dd>
+                    <dd class="text-sm text-on-surface text-right">{{ course.sessionCount }}</dd>
                   </div>
                 </dl>
 
-                <div class="p-5 rounded-2xl bg-surface-container space-y-2">
-                  <h3 class="label-md text-primary">Incluye</h3>
-                  <ul class="space-y-1.5">
-                    @for (item of course.includes; track item) {
-                      <li class="flex items-start gap-2.5 text-sm text-on-surface-variant">
-                        <span
-                          class="material-symbols-outlined text-primary text-base mt-0.5
-                                 shrink-0"
-                        >
-                          workspace_premium
-                        </span>
-                        {{ item }}
-                      </li>
-                    }
-                  </ul>
-                </div>
+                @if (course.includes?.length) {
+                  <div class="p-5 rounded-2xl bg-surface-container space-y-2">
+                    <h3 class="label-md text-primary">Incluye</h3>
+                    <ul class="space-y-1.5">
+                      @for (item of course.includes; track item) {
+                        <li class="flex items-start gap-2.5 text-sm text-on-surface-variant">
+                          <span
+                            class="material-symbols-outlined text-primary text-base mt-0.5 shrink-0"
+                          >
+                            workspace_premium
+                          </span>
+                          {{ item }}
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
 
                 <div
                   class="pt-5 border-t border-surface-variant
@@ -134,7 +134,7 @@ import { CourseService } from '../../core/services/course.service';
                   </div>
                   <a
                     routerLink="/reservar"
-                    [queryParams]="{ curso: course.id }"
+                    [queryParams]="{ curso: course.slug }"
                     class="btn-primary !py-3 !px-6 !text-[0.6875rem]"
                   >
                     Reservar
@@ -154,7 +154,10 @@ import { CourseService } from '../../core/services/course.service';
   `,
 })
 export class CoursesComponent {
+  private readonly courseService = inject(CourseService);
+
   protected readonly filters = ['Todos', 'Inicial', 'Profesional', 'Avanzado'];
+  protected readonly activeFilter = signal('Todos');
 
   protected readonly values = [
     {
@@ -179,19 +182,29 @@ export class CoursesComponent {
     },
   ];
 
-  protected readonly activeFilter = signal('Todos');
+  /**
+   * Datos de la API como signal.
+   *
+   * toSignal mantiene la plantilla reactiva sin suscribirse a mano en
+   * ngOnInit ni worries de desuscribir.
+   */
+  private readonly courses = toSignal(this.courseService.getCourses(), {
+    initialValue: [] as Course[],
+  });
 
-  constructor(private readonly courseService: CourseService) {}
-
-  protected filteredCourses() {
-    const all = this.courseService.getCourses();
+  protected filteredCourses(): Course[] {
     const filter = this.activeFilter();
+    const courses = this.courses();
 
-    if (filter === 'Todos') return all;
-    return all.filter((c) => c.tag.includes(filter));
+    if (filter === 'Todos') return courses;
+    return courses.filter((c) => c.tag?.includes(filter));
   }
 
-  protected formatPrice(value: number): string {
-    return `$${value.toLocaleString('es-MX')} MXN`;
+  protected formatPrice(value: number | undefined): string {
+    // openapi-typescript marca cada campo como opcional porque OpenAPI 3.0
+    // no distingue "ausente" de "obligatorio". El DTO de C# sí: price y
+    // depositAmount nunca llegan null. El 0 es una red de seguridad para
+    // que un cambio futuro en el contrato no rompa la vista.
+    return `$${(value ?? 0).toLocaleString('es-MX')} MXN`;
   }
 }
