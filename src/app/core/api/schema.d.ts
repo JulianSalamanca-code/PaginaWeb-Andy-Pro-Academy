@@ -4,6 +4,91 @@
  */
 
 export interface paths {
+    "/api/booking/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Horarios libres de un servicio en una fecha */
+        get: operations["GetAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Crea una reserva y devuelve su folio */
+        post: operations["CreateBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle de una reserva */
+        get: operations["GetBooking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking/agenda": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reservas de una fecha */
+        get: operations["GetAgenda"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/booking/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Confirma, completa o cancela una reserva */
+        patch: operations["UpdateBookingStatus"];
+        trace?: never;
+    };
     "/api/catalog/services": {
         parameters: {
             query?: never;
@@ -276,6 +361,99 @@ export interface components {
             /** Format: int32 */
             extraMinutes?: number;
         };
+        /** @description Fila de la agenda del panel de administración. */
+        AdminBookingDto: {
+            /** Format: uuid */
+            id?: string;
+            code?: string | null;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            contactEmail?: string | null;
+            subjectName?: string | null;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            modality?: string | null;
+            status?: string | null;
+            /** Format: double */
+            priceTotal?: number;
+            /** Format: double */
+            depositAmount?: number;
+            /** Format: double */
+            depositPaid?: number;
+            notes?: string | null;
+            rfcReceiver?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /**
+         * @description Respuesta de la consulta de disponibilidad.
+         *
+         *     Incluye la duración y el precio para que el frontend no tenga que
+         *     pedirlos aparte: el precio total depende de los complementos, y el
+         *     resumen lateral necesita ambos antes de que la clienta elija.
+         */
+        AvailabilityResponseDto: {
+            /** Format: int32 */
+            specialistId?: number;
+            /** Format: date */
+            date?: string;
+            slots?: components["schemas"]["AvailabilitySlotDto"][] | null;
+            /** Format: int32 */
+            durationMinutes?: number;
+            /** Format: double */
+            basePrice?: number;
+            /** Format: double */
+            depositAmount?: number;
+        };
+        /** @description Un horario libre, ya descontado de reservas y bloqueos. */
+        AvailabilitySlotDto: {
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+        };
+        /** @description Detalle de una reserva concreta. */
+        BookingDetailDto: {
+            booking?: components["schemas"]["BookingDto"];
+            /** Format: int32 */
+            specialistId?: number;
+            specialistName?: string | null;
+            /** Format: double */
+            depositPaid?: number;
+            depositConfirmed?: boolean;
+        };
+        /** @description Reserva creada. Es lo que la clienta ve al confirmar. */
+        BookingDto: {
+            /** Format: uuid */
+            id?: string;
+            code?: string | null;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            modality?: string | null;
+            status?: string | null;
+            /** Format: double */
+            priceTotal?: number;
+            /** Format: double */
+            depositAmount?: number;
+            /** Format: double */
+            balanceAmount?: number;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            contactEmail?: string | null;
+            notes?: string | null;
+            /** Format: int32 */
+            serviceId?: number | null;
+            /** Format: uuid */
+            courseId?: string | null;
+            addOnIds?: number[] | null;
+            subjectName?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         /** @description Curso del catálogo con su temario completo. */
         CourseDto: {
             /** Format: uuid */
@@ -312,6 +490,26 @@ export interface components {
             /** Format: double */
             depositAmount?: number;
             imageUrl?: string | null;
+        };
+        /** @description Datos que envía el frontend para crear una reserva. */
+        CreateBookingRequest: {
+            /** Format: int32 */
+            specialistId?: number;
+            /** Format: date-time */
+            startsAt?: string;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            contactEmail?: string | null;
+            /** Format: int32 */
+            serviceId?: number | null;
+            /** Format: uuid */
+            courseId?: string | null;
+            addOnIds?: number[] | null;
+            modality?: string | null;
+            notes?: string | null;
+            rfcReceiver?: string | null;
+            /** Format: uuid */
+            studentId?: string | null;
         };
         FaqDto: {
             /** Format: uuid */
@@ -413,6 +611,12 @@ export interface components {
             service?: components["schemas"]["ServiceDto"];
             addOns?: components["schemas"]["AddOnDto"][] | null;
         };
+        /** @description Resultado de intentar reservar un horario que ya se tomó. */
+        SlotConflictResponse: {
+            error?: string | null;
+            message?: string | null;
+            alternatives?: components["schemas"]["AvailabilitySlotDto"][] | null;
+        };
         SpecialistDto: {
             /** Format: int32 */
             id?: number;
@@ -420,6 +624,11 @@ export interface components {
             title?: string | null;
             bio?: string | null;
             imageUrl?: string | null;
+        };
+        /** @description Cambio manual del estado de una reserva. */
+        UpdateBookingStatusRequest: {
+            status?: string | null;
+            reason?: string | null;
         };
     };
     responses: never;
@@ -430,6 +639,169 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetAvailability: {
+        parameters: {
+            query: {
+                date: string;
+                serviceId: number;
+                specialistId?: number;
+                addOnIds?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvailabilityResponseDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CreateBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlotConflictResponse"];
+                };
+            };
+        };
+    };
+    GetBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingDetailDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAgenda: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBookingDto"][];
+                };
+            };
+        };
+    };
+    UpdateBookingStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBookingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingDetailDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetServices: {
         parameters: {
             query?: never;

@@ -1,18 +1,34 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, catchError, map, tap } from 'rxjs';
+import { Observable, of, catchError, map } from 'rxjs';
 import { ApiService } from '../api/api.service';
-import type { components } from '../api/schema';
+import type {
+  Course,
+  CourseSummary,
+  Faq,
+  HomeData,
+  Product,
+  Review,
+  ServiceWithAddOns,
+  Specialist,
+} from './catalog.types';
 
-export type Course = components['schemas']['CourseDto'];
-export type CourseSummary = components['schemas']['CourseSummaryDto'];
-export type ServiceWithAddOns = components['schemas']['ServiceWithAddOnsDto'];
-export type Service = components['schemas']['ServiceDto'];
-export type AddOn = components['schemas']['AddOnDto'];
-export type Product = components['schemas']['ProductDto'];
-export type ProductVariant = components['schemas']['ProductVariantDto'];
-export type Review = components['schemas']['ReviewDto'];
-export type Faq = components['schemas']['FaqDto'];
-export type HomeData = components['schemas']['HomeDataDto'];
+// Se reexportan para que los componentes importen de un lugar estable. El
+// archivo generado schema.d.ts se sobrescribe en cada regeneración del
+// contrato, así que no conviene importarlo directamente desde ahí.
+export type {
+  AddOn,
+  Course,
+  CourseSummary,
+  Faq,
+  HomeData,
+  Product,
+  ProductVariant,
+  Review,
+  Service,
+  ServiceSummary,
+  ServiceWithAddOns,
+  Specialist,
+} from './catalog.types';
 
 /**
  * Catálogo del estudio.
@@ -24,7 +40,9 @@ export type HomeData = components['schemas']['HomeDataDto'];
  * Cuando la API no responde se devuelve el catálogo embebido de
  * EMBEDDED_COURSES. Es lo que permite que el build con prerender funcione
  * sin la base de datos levantada: si no, la compilación fallaría al pedir
- * los slugs y no se podría ni generar el sitio estático.
+ * los slugs y no se podría ni generar el sitio estático. También cubre el
+ * arranque en frío y el caso en que el plan gratuito de Supabase pausa el
+ * proyecto a los 7 días sin actividad.
  */
 @Injectable({ providedIn: 'root' })
 export class CourseService {
@@ -35,26 +53,19 @@ export class CourseService {
   // ------------------------------------------------------------------
 
   getCourses(): Observable<Course[]> {
-    return this.api
-      .get<Course[]>('/catalog/courses')
-      .pipe(catchError(() => of(EMBEDDED_COURSES)));
+    return this.api.get<Course[]>('/catalog/courses').pipe(catchError(() => of(EMBEDDED_COURSES)));
   }
 
   getFeaturedCourses(limit = 3): Observable<CourseSummary[]> {
-    return this.api
-      .get<HomeData>('/catalog/home')
-      .pipe(
-        map((data) => data.featuredCourses?.slice(0, limit) ?? []),
-        catchError(() => of(EMBEDDED_COURSES.slice(0, limit))),
-      );
+    return this.api.get<HomeData>('/catalog/home').pipe(
+      map((data) => data.featuredCourses?.slice(0, limit) ?? []),
+      catchError(() => of(EMBEDDED_COURSES.slice(0, limit))),
+    );
   }
 
   getCourseBySlug(slug: string): Observable<Course | null> {
     return this.api.get<Course>(`/catalog/courses/${slug}`).pipe(
-      catchError(() => {
-        const fallback = EMBEDDED_COURSES.find((c) => c.slug === slug);
-        return of(fallback ?? null);
-      }),
+      catchError(() => of(EMBEDDED_COURSES.find((c) => c.slug === slug) ?? null)),
     );
   }
 
@@ -68,6 +79,10 @@ export class CourseService {
 
   getServiceBySlug(slug: string): Observable<ServiceWithAddOns> {
     return this.api.get<ServiceWithAddOns>(`/catalog/services/${slug}`);
+  }
+
+  getSpecialists(): Observable<Specialist[]> {
+    return this.api.get<Specialist[]>('/catalog/specialists');
   }
 
   // ------------------------------------------------------------------
@@ -94,10 +109,8 @@ export class CourseService {
 /**
  * Catálogo de respaldo.
  *
- * Refleja el contenido sembrado en la base. Se usa cuando la API no está
- * disponible: en el build con prerender, en el primer arranque en frío, o
- * si Supabase está pausado (el plan gratuito se pausa a los 7 días sin
- * actividad). En esos casos el sitio sigue viéndose completo.
+ * Refleja el contenido sembrado en la base, para que el sitio siga
+ * viéndose completo si la API no está disponible.
  */
 const EMBEDDED_COURSES: Course[] = [
   {
