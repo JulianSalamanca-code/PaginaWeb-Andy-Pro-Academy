@@ -1,1 +1,287 @@
-/* You can add global styles to this file, and also import other style files */
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------
+   Sistema de diseño — Andy Cosmetología • Puebla Studio
+   Traducido de DESIGN.md (Haute Cosmetology Dark Studio).
+   ------------------------------------------------------------------ */
+@theme {
+  /* Superficies: carbón profundo con matiz cálido */
+  --color-surface: #151317;
+  --color-surface-lowest: #0f0d11;
+  --color-surface-low: #1d1b1f;
+  --color-surface-container: #211f23;
+  --color-surface-high: #2b292d;
+  --color-surface-highest: #363438;
+  --color-surface-bright: #3b383d;
+
+  /* Rosado metálico: el acento de marca */
+  --color-primary: #f6b3d2;
+  --color-primary-container: #d495b2;
+  --color-primary-fixed: #ffd8e8;
+  --color-on-primary: #4e2139;
+  --color-on-primary-container: #5c2d45;
+
+  --color-secondary: #e3bccb;
+  --color-secondary-container: #5d414d;
+  --color-on-secondary: #422934;
+
+  --color-tertiary: #f9b3cf;
+  --color-tertiary-container: #d794b0;
+  --color-on-tertiary: #4f2037;
+
+  /* Texto */
+  --color-on-surface: #e7e1e6;
+  --color-on-surface-variant: #d4c2c8;
+  --color-outline: #9c8d92;
+  --color-outline-variant: #504348;
+
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+
+  /* Tipografía */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
+  --font-symbols: 'Material Symbols Outlined';
+
+  /* Radios: curvy mediums, nada demasiado redondo salvo píldoras */
+  --radius-sm: 0.25rem;
+  --radius-DEFAULT: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  /* Espaciado vertical generoso, ritmo editorial */
+  --spacing-gutter: 1.5rem;
+  --spacing-gutter-mobile: 1rem;
+  --spacing-margin: 2rem;
+  --spacing-margin-mobile: 1rem;
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+
+  /* Barra de滚动 discreta, acorde al tema oscuro */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-lowest);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-high);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-surface-bright);
+  }
+
+  /* Los títulos serif llevan la voz editorial */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  /* Micro-etiquetas en versalitas con tracking amplio */
+  .label-md {
+    font-family: var(--font-body);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .label-sm {
+    font-family: var(--font-body);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .material-symbols-outlined {
+    font-family: var(--font-symbols);
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Componentes reutilizables
+   ------------------------------------------------------------------ */
+@layer components {
+  /* Cristal ahumado: el nivel 1 de elevación del DESIGN.md */
+  .card-glass {
+    background-color: var(--color-surface-container);
+    border: 1px solid color-mix(in srgb, var(--color-primary-container) 12%, transparent);
+    border-radius: var(--radius-xl);
+  }
+
+  .card-glass-hover {
+    transition:
+      background-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+  .card-glass-hover:hover {
+    background-color: var(--color-surface-high);
+    box-shadow: 0 20px 40px -12px rgb(0 0 0 / 0.7);
+  }
+
+  /* Botón primario: píldora con gradiente metálico y halo al pasar */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem 2rem;
+    border-radius: 9999px;
+    background-image: linear-gradient(
+      135deg,
+      #e5a4c0 0%,
+      var(--color-primary-container) 100%
+    );
+    color: var(--color-on-primary);
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    box-shadow: 0 0 28px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    transition:
+      box-shadow 0.3s ease,
+      transform 0.3s ease;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 36px color-mix(in srgb, var(--color-primary) 50%, transparent);
+    transform: translateY(-2px);
+  }
+
+  /* Botón secundario: grafito con filete rosado */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem 1.75rem;
+    border-radius: 9999px;
+    background-color: var(--color-surface-high);
+    border: 1px solid color-mix(in srgb, var(--color-primary-container) 35%, transparent);
+    color: #fad2e1;
+    font-family: var(--font-body);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition:
+      background-color 0.3s ease,
+      border-color 0.3s ease;
+    cursor: pointer;
+  }
+  .btn-ghost:hover {
+    background-color: color-mix(in srgb, var(--color-primary-container) 5%, var(--color-surface-high));
+    border-color: var(--color-primary-container);
+  }
+
+  /* Píldoras de categoría: apagadas por defecto, encendidas al estar activas */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    background-color: var(--color-surface-high);
+    color: #b8b2ba;
+    font-family: var(--font-body);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  .chip-active {
+    background-color: color-mix(in srgb, var(--color-primary-container) 12%, transparent);
+    color: var(--color-primary);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+    box-shadow: inset 0 0 12px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  /* Campos de formulario: relleno oscuro con foco mauve */
+  .input-dark {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-DEFAULT);
+    background-color: #18161b;
+    border: 1px solid transparent;
+    color: var(--color-on-surface);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .input-dark::placeholder {
+    color: rgb(250 247 248 / 0.35);
+  }
+  .input-dark:focus {
+    outline: none;
+    border-color: var(--color-primary-container);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+
+  /* Resplandores difusos del fondo, por detrás de la hero */
+  .bokeh-glow {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(120px);
+    pointer-events: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Utilidades
+   ------------------------------------------------------------------ */
+@utility container-luxury {
+  width: 100%;
+  max-width: 80rem; /* 1280px, el límite del DESIGN.md */
+  margin-inline: auto;
+  padding-inline: 1rem;
+
+  @media (width >= 40rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 3rem;
+  }
+}

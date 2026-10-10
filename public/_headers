@@ -1,0 +1,37 @@
+# Headers de Cloudflare Pages y Netlify.
+
+/*
+  La API y el frontend pueden vivir en subdominios distintos. allow-origin
+  se limita al dominio de producción en vez de usar '*', para que nadie más
+  pueda llamar a la API desde su página.
+
+  El valor se cambia al desplegar: en local Angular corre en el puerto
+  4200 y no en un subdominio.
+*/
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Cache larga para los assets con hash en el nombre.
+# Los nombres llevan hash porque Angular los genera con outputHashing=all,
+# así que cambiar el archivo implica cambiar la URL.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# El HTML nunca se cachea: si no, un despliegue nuevo seguiría sirviendo
+# el index viejo y apuntando a bundles que ya no existen.
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate

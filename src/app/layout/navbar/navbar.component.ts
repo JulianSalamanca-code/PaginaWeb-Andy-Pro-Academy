@@ -1,0 +1,187 @@
+import { Component, signal, inject } from '@angular/core';
+import { RouterLink, RouterLinkActive, Router } from '@angular/router';
+import { CartService } from '../../core/api/cart.service';
+import { AuthService } from '../../core/auth/auth.service';
+
+@Component({
+  selector: 'app-navbar',
+  standalone: true,
+  imports: [RouterLink, RouterLinkActive],
+  template: `
+    <header
+      class="fixed top-0 inset-x-0 z-50 transition-all duration-300"
+      [class.bg-surface]="scrolled()"
+      [class.backdrop-blur-xl]="scrolled()"
+      [class.border-b]="scrolled()"
+      [class.border-surface-variant]="scrolled()"
+    >
+      <nav class="container-luxury flex items-center justify-between h-20">
+        <!-- Marca -->
+        <a routerLink="/" class="flex items-center gap-3 shrink-0 group">
+          <span
+            class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-container
+                   flex items-center justify-center text-on-primary
+                   shadow-[0_0_20px_rgba(212,149,178,0.3)]"
+          >
+            <span class="material-symbols-outlined text-xl">spa</span>
+          </span>
+          <span class="flex flex-col leading-tight">
+            <span class="font-display text-lg text-on-surface">Andy Cosmetología</span>
+            <span class="label-sm text-primary">Puebla • Studio</span>
+          </span>
+        </a>
+
+        <!-- Enlaces de escritorio -->
+        <ul class="hidden lg:flex items-center gap-8">
+          @for (link of links; track link.path) {
+            <li>
+              <a
+                [routerLink]="link.path"
+                routerLinkActive="text-primary"
+                [routerLinkActiveOptions]="{ exact: link.path === '/' }"
+                class="label-md text-on-surface-variant hover:text-primary transition-colors"
+              >
+                {{ link.label }}
+              </a>
+            </li>
+          }
+        </ul>
+
+        <!-- Acciones -->
+        <div class="hidden lg:flex items-center gap-3">
+          <a
+            routerLink="/reservar"
+            class="btn-primary !py-2.5 !px-5 !text-[0.6875rem]"
+          >
+            <span class="material-symbols-outlined text-base">calendar_today</span>
+            Reservar
+          </a>
+          <!-- Sesión: si hay cuenta, muestra el correo y la opción de salir -->
+          @if (auth.isAuthenticated()) {
+            <div class="hidden lg:flex items-center gap-3">
+              <span class="text-xs text-on-surface-variant max-w-40 truncate">
+                {{ auth.email() }}
+              </span>
+              <button
+                type="button"
+                class="label-sm px-4 py-2.5 rounded-full border border-primary-container/35
+                       text-primary hover:bg-primary/10 transition-colors"
+                (click)="signOut()"
+              >
+                Salir
+              </button>
+            </div>
+          } @else {
+            <a
+              routerLink="/login"
+              class="hidden lg:inline-flex items-center gap-2 label-sm px-5 py-2.5
+                     rounded-full border border-primary-container/35 text-primary
+                     hover:bg-primary/10 transition-colors"
+            >
+              <span class="material-symbols-outlined text-base">person</span>
+              Entrar
+            </a>
+          }
+
+          <button
+            type="button"
+            class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface
+                   flex items-center justify-center hover:text-primary transition-colors
+                   relative"
+            aria-label="Abrir carrito"
+            (click)="cart.toggle()"
+          >
+            <span class="material-symbols-outlined text-lg">shopping_bag</span>
+            @if (cart.count() > 0) {
+              <span
+                class="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full
+                       bg-primary text-on-primary label-sm flex items-center justify-center"
+              >
+                {{ cart.count() }}
+              </span>
+            }
+          </button>
+        </div>
+
+        <!-- Botón de menú móvil -->
+        <button
+          type="button"
+          class="lg:hidden w-10 h-10 rounded-full bg-surface-container-high
+                 text-on-surface flex items-center justify-center"
+          [attr.aria-expanded]="menuOpen()"
+          aria-label="Abrir menú"
+          (click)="menuOpen.set(!menuOpen())"
+        >
+          <span class="material-symbols-outlined text-xl">
+            {{ menuOpen() ? 'close' : 'menu' }}
+          </span>
+        </button>
+      </nav>
+
+      <!-- Panel móvil -->
+      @if (menuOpen()) {
+        <div class="lg:hidden bg-surface-container border-t border-surface-variant">
+          <ul class="container-luxury flex flex-col py-4 gap-1">
+            @for (link of links; track link.path) {
+              <li>
+                <a
+                  [routerLink]="link.path"
+                  routerLinkActive="text-primary"
+                  class="block py-3 label-md text-on-surface-variant hover:text-primary transition-colors"
+                  (click)="menuOpen.set(false)"
+                >
+                  {{ link.label }}
+                </a>
+              </li>
+            }
+            <li class="pt-3 mt-2 border-t border-surface-variant">
+              <a
+                routerLink="/reservar"
+                class="btn-primary w-full"
+                (click)="menuOpen.set(false)"
+              >
+                <span class="material-symbols-outlined text-base">calendar_today</span>
+                Reservar Ahora
+              </a>
+            </li>
+          </ul>
+        </div>
+      }
+    </header>
+  `,
+})
+export class NavbarComponent {
+  protected readonly links = [
+    { path: '/', label: 'Inicio' },
+    { path: '/servicios', label: 'Servicios' },
+    { path: '/cursos', label: 'Cursos' },
+    { path: '/tienda', label: 'Tienda' },
+    { path: '/reservar', label: 'Reservar' },
+  ];
+
+  protected readonly menuOpen = signal(false);
+  protected readonly scrolled = signal(false);
+
+  /**
+   * El carrito vive en un servicio, no en el componente, para que el
+   * navbar muestre el conteo sin conocer los detalles de la tienda.
+   */
+  protected readonly cart = inject(CartService);
+  protected readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  protected async signOut(): Promise<void> {
+    await this.auth.signOut();
+    // Sin sesión activa, /admin y /mis-reservas ya no son accesibles.
+    // Volver al inicio evita dejar al usuario en una página protegida.
+    await this.router.navigateByUrl('/');
+  }
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const onScroll = () => this.scrolled.set(window.scrollY > 24);
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
+  }
+}

@@ -1,0 +1,11 @@
+/*
+ * Cloudflare Pages y Netlify sirven este sitio como archivos estáticos.
+ * Sin esta regla, recargar /reservar devolvería 404: esas rutas se
+ * resuelven en el navegador, pero el servidor no tiene un archivo con ese
+ * nombre.
+ *
+ * Cloudflare sirve primero el archivo real y solo usa la regla si no lo
+ * encuentra, así que las cuatro rutas prerenderizadas siguen sirviendo su
+ * HTML estático y los buscadores las indexan.
+ */
+/*    /index.html   200
