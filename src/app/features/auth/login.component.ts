@@ -1,10 +1,12 @@
-import { Component, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [RouterLink],
+  imports: [FormsModule, RouterLink],
   template: `
     <section class="py-24 min-h-[70vh] flex items-center">
       <div class="container-luxury">
@@ -18,7 +20,7 @@ import { RouterLink } from '@angular/router';
           </div>
 
           <div class="card-glass p-8 space-y-5">
-            <form class="space-y-5" (submit)="onSubmit($event)">
+            <form class="space-y-5" (ngSubmit)="submit()">
               <div class="space-y-2">
                 <label for="email" class="label-sm text-outline">Correo electrónico</label>
                 <input
@@ -27,8 +29,9 @@ import { RouterLink } from '@angular/router';
                   autocomplete="email"
                   class="input-dark"
                   placeholder="tu@correo.com"
-                  [value]="email()"
-                  (input)="email.set($any($event.target).value)"
+                  name="email"
+                  [(ngModel)]="email"
+                  [disabled]="submitting()"
                 />
               </div>
 
@@ -40,24 +43,26 @@ import { RouterLink } from '@angular/router';
                   autocomplete="current-password"
                   class="input-dark"
                   placeholder="••••••••"
-                  [value]="password()"
-                  (input)="password.set($any($event.target).value)"
+                  name="password"
+                  [(ngModel)]="password"
+                  [disabled]="submitting()"
                 />
               </div>
 
               @if (error()) {
-                <p class="text-sm text-error flex items-center gap-2">
-                  <span class="material-symbols-outlined text-base">error</span>
-                  {{ error() }}
+                <p class="text-sm text-error flex items-start gap-2">
+                  <span class="material-symbols-outlined text-base mt-0.5">error</span>
+                  <span>{{ error() }}</span>
                 </p>
               }
 
-              <button type="submit" class="btn-primary w-full" [disabled]="submitting()">
-                @if (submitting()) {
-                  Verificando…
-                } @else {
-                  Entrar
-                }
+              <button
+                type="submit"
+                class="btn-primary w-full"
+                [disabled]="submitting() || !auth.isConfigured()"
+                [class.opacity-50]="!auth.isConfigured()"
+              >
+                {{ submitting() ? 'Verificando…' : 'Entrar' }}
               </button>
             </form>
 
@@ -67,44 +72,57 @@ import { RouterLink } from '@angular/router';
             </p>
           </div>
 
-          <!-- Aviso: la autenticación real se conecta en la feature/auth -->
-          <p
-            class="mt-6 p-4 rounded-xl bg-surface-container text-xs text-on-surface-variant
-                   flex items-start gap-2.5"
-          >
-            <span class="material-symbols-outlined text-primary text-base mt-0.5">info</span>
-            Autenticación pendiente de conectar con Supabase Auth en la rama
-            <code class="text-primary">feature/auth</code>.
-          </p>
+          @if (!auth.isConfigured()) {
+            <p
+              class="mt-6 p-4 rounded-xl bg-surface-container text-xs text-on-surface-variant
+                     flex items-start gap-2.5"
+            >
+              <span class="material-symbols-outlined text-primary text-base mt-0.5">info</span>
+              Supabase no está configurado. Añade la URL y la anon key en
+              <code class="text-primary">src/environments/environment.ts</code> para activar el
+              inicio de sesión.
+            </p>
+          }
         </div>
       </div>
     </section>
   `,
 })
 export class LoginComponent {
-  protected readonly email = signal('');
-  protected readonly password = signal('');
-  protected readonly error = signal('');
-  protected readonly submitting = signal(false);
+  protected readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
-  protected onSubmit(event: Event): void {
-    event.preventDefault();
+  protected email = '';
+  protected password = '';
+
+  protected readonly submitting = signal(false);
+  protected readonly error = signal('');
+
+  protected async submit(): Promise<void> {
     this.error.set('');
 
-    if (!this.email().includes('@')) {
-      this.error.set('Introduce un correo válido.');
+    if (!this.email.includes('@')) {
+      this.error.set('Escribe un correo válido.');
       return;
     }
-    if (this.password().length < 6) {
+    if (this.password.length < 6) {
       this.error.set('La contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
     this.submitting.set(true);
-    // Placeholder: Supabase Auth entra en feature/auth.
-    setTimeout(() => {
-      this.submitting.set(false);
-      this.error.set('Autenticación aún no habilitada en el prototipo.');
-    }, 600);
+
+    const error = await this.auth.signIn(this.email, this.password);
+    this.submitting.set(false);
+
+    if (error) {
+      this.error.set(error);
+      return;
+    }
+
+    // Vuelve a la página que intentaba abrir, o al inicio.
+    const redirect = this.route.snapshot.queryParamMap.get('redirect');
+    await this.router.navigateByUrl(redirect || '/');
   }
 }

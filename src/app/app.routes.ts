@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
+import { authGuard, adminGuard } from './core/auth/auth.guard';
 
 export const routes: Routes = [
   {
@@ -39,6 +40,7 @@ export const routes: Routes = [
       {
         path: 'mis-reservas',
         title: 'Mis Reservas | Andy Cosmetología',
+        canActivate: [authGuard],
         loadComponent: () =>
           import('./features/bookings/my-bookings.component').then((m) => m.MyBookingsComponent),
       },
@@ -57,8 +59,11 @@ export const routes: Routes = [
   },
   {
     // Fuera del layout público: el admin tiene su propia pantalla completa.
+    // adminGuard consulta el rol en la API, porque el JWT de Supabase solo
+    // dice si el usuario está autenticado, no si es la dueña del estudio.
     path: 'admin',
     title: 'Panel de Administración | Andy Studio',
+    canActivate: [authGuard, adminGuard],
     loadComponent: () => import('./features/admin/admin.component').then((m) => m.AdminComponent),
   },
   { path: '**', redirectTo: '' },

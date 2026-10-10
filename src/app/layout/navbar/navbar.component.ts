@@ -1,6 +1,7 @@
 import { Component, signal, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { CartService } from '../../core/api/cart.service';
+import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-navbar',
@@ -55,6 +56,33 @@ import { CartService } from '../../core/api/cart.service';
             <span class="material-symbols-outlined text-base">calendar_today</span>
             Reservar
           </a>
+          <!-- Sesión: si hay cuenta, muestra el correo y la opción de salir -->
+          @if (auth.isAuthenticated()) {
+            <div class="hidden lg:flex items-center gap-3">
+              <span class="text-xs text-on-surface-variant max-w-40 truncate">
+                {{ auth.email() }}
+              </span>
+              <button
+                type="button"
+                class="label-sm px-4 py-2.5 rounded-full border border-primary-container/35
+                       text-primary hover:bg-primary/10 transition-colors"
+                (click)="signOut()"
+              >
+                Salir
+              </button>
+            </div>
+          } @else {
+            <a
+              routerLink="/login"
+              class="hidden lg:inline-flex items-center gap-2 label-sm px-5 py-2.5
+                     rounded-full border border-primary-container/35 text-primary
+                     hover:bg-primary/10 transition-colors"
+            >
+              <span class="material-symbols-outlined text-base">person</span>
+              Entrar
+            </a>
+          }
+
           <button
             type="button"
             class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface
@@ -139,6 +167,15 @@ export class NavbarComponent {
    * navbar muestre el conteo sin conocer los detalles de la tienda.
    */
   protected readonly cart = inject(CartService);
+  protected readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  protected async signOut(): Promise<void> {
+    await this.auth.signOut();
+    // Sin sesión activa, /admin y /mis-reservas ya no son accesibles.
+    // Volver al inicio evita dejar al usuario en una página protegida.
+    await this.router.navigateByUrl('/');
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
