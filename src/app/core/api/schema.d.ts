@@ -4,6 +4,129 @@
  */
 
 export interface paths {
+    "/api/admin/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Métricas del día para las tarjetas del panel */
+        get: operations["GetAdminMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/agenda": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reservas de una fecha, incluidas las canceladas */
+        get: operations["GetAdminAgenda"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bookings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle completo de una reserva */
+        get: operations["GetAdminBookingDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alias de /agenda, para el flujo del panel */
+        get: operations["GetAdminBookingsByDate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Productos con stock, incluidos los no publicados */
+        get: operations["GetAdminProducts"];
+        put?: never;
+        /** Crea o actualiza un producto */
+        post: operations["UpsertProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/products/{id}/published": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Muestra u oculta un producto del catálogo */
+        patch: operations["ToggleProductPublished"];
+        trace?: never;
+    };
+    "/api/admin/variants/{id}/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ajusta el stock de una variante y registra el movimiento
+         * @description Manda un delta (cuántas unidades entran o salen), no el total. Poner el total desde el panel pisaría las ventas que ocurrieron mientras se escribía.
+         */
+        post: operations["AdjustStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/booking/availability": {
         parameters: {
             query?: never;
@@ -361,6 +484,52 @@ export interface components {
             /** Format: int32 */
             extraMinutes?: number;
         };
+        /** @description Ajuste de stock. */
+        AdjustStockRequest: {
+            /**
+             * Format: int32
+             * @description Cambio de unidades. Positivo entra producto, negativo sale.
+             *     Nunca se envía el total absoluto: poner 'stock = 5' desde el panel
+             *     pisaría las ventas que ocurrieron mientras se escribía.
+             */
+            delta?: number;
+            /**
+             * @description Motivo del movimiento. Se guarda en inventory_movements para poder
+             *     auditar por qué cambió el stock.
+             */
+            reason?: string | null;
+        };
+        /** @description Desglose de una reserva para el detalle del panel. */
+        AdminBookingDetailDto: {
+            /** Format: uuid */
+            id?: string;
+            code?: string | null;
+            clientName?: string | null;
+            clientPhone?: string | null;
+            clientEmail?: string | null;
+            subject?: string | null;
+            kind?: string | null;
+            status?: string | null;
+            modality?: string | null;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            /** Format: double */
+            total?: number;
+            /** Format: double */
+            deposit?: number;
+            depositPaid?: boolean;
+            /** Format: date-time */
+            depositPaidAt?: string | null;
+            paymentReference?: string | null;
+            notes?: string | null;
+            rfcReceiver?: string | null;
+            specialistName?: string | null;
+            addOnIds?: number[] | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         /** @description Fila de la agenda del panel de administración. */
         AdminBookingDto: {
             /** Format: uuid */
@@ -386,6 +555,75 @@ export interface components {
             rfcReceiver?: string | null;
             /** Format: date-time */
             createdAt?: string;
+        };
+        /** @description Resumen para las tarjetas de métricas del panel. */
+        AdminMetricsDto: {
+            /** Format: int32 */
+            bookingsToday?: number;
+            /** Format: int32 */
+            pendingConfirmation?: number;
+            /** Format: int32 */
+            confirmedToday?: number;
+            /** Format: double */
+            depositsCollected?: number;
+            /** Format: double */
+            expectedToday?: number;
+            /** Format: int32 */
+            lowStockProducts?: number;
+            /** Format: int32 */
+            outOfStockProducts?: number;
+        };
+        /** @description Producto con su stock, tal como lo ve el panel. */
+        AdminProductDto: {
+            /** Format: uuid */
+            id?: string;
+            slug?: string | null;
+            name?: string | null;
+            brand?: string | null;
+            category?: string | null;
+            description?: string | null;
+            icon?: string | null;
+            imageUrl?: string | null;
+            /** Format: double */
+            price?: number;
+            /** Format: double */
+            taxRate?: number;
+            isPublished?: boolean;
+            variants?: components["schemas"]["AdminVariantDto"][] | null;
+        };
+        AdminVariantDto: {
+            /** Format: int32 */
+            id?: number;
+            sizeLabel?: string | null;
+            sku?: string | null;
+            /** Format: int32 */
+            stockOnHand?: number;
+            /** Format: double */
+            priceOverride?: number | null;
+        };
+        /** @description Fila de la agenda del día, pensada para leerse de un vistazo. */
+        AgendaEntryDto: {
+            /** Format: uuid */
+            id?: string;
+            code?: string | null;
+            clientName?: string | null;
+            clientPhone?: string | null;
+            clientEmail?: string | null;
+            subject?: string | null;
+            kind?: string | null;
+            /** Format: date-time */
+            startsAt?: string;
+            /** Format: date-time */
+            endsAt?: string;
+            status?: string | null;
+            modality?: string | null;
+            /** Format: double */
+            total?: number;
+            /** Format: double */
+            deposit?: number;
+            depositPaid?: boolean;
+            notes?: string | null;
+            rfcReceiver?: string | null;
         };
         /**
          * @description Respuesta de la consulta de disponibilidad.
@@ -630,6 +868,21 @@ export interface components {
             status?: string | null;
             reason?: string | null;
         };
+        /** @description Datos para crear o editar un producto desde el panel. */
+        UpsertProductRequest: {
+            name?: string | null;
+            brand?: string | null;
+            category?: string | null;
+            /** Format: double */
+            price?: number;
+            description?: string | null;
+            slug?: string | null;
+            icon?: string | null;
+            imageUrl?: string | null;
+            /** Format: uuid */
+            id?: string | null;
+            isPublished?: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -639,6 +892,205 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    GetAdminMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMetricsDto"];
+                };
+            };
+        };
+    };
+    GetAdminAgenda: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgendaEntryDto"][];
+                };
+            };
+        };
+    };
+    GetAdminBookingDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBookingDetailDto"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAdminBookingsByDate: {
+        parameters: {
+            query: {
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgendaEntryDto"][];
+                };
+            };
+        };
+    };
+    GetAdminProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductDto"][];
+                };
+            };
+        };
+    };
+    UpsertProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductDto"];
+                };
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ToggleProductPublished: {
+        parameters: {
+            query: {
+                isPublished: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdjustStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustStockRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetAvailability: {
         parameters: {
             query: {
