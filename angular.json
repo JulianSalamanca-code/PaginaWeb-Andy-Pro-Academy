@@ -29,7 +29,8 @@
               "src/styles.css"
             ],
             "server": "src/main.server.ts",
-            "outputMode": "server",
+            "outputMode": "static",
+            "outputPath": "dist/andy-pro-academy",
             "security": {
               "allowedHosts": []
             },

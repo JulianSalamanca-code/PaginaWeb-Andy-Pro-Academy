@@ -8,17 +8,16 @@ import { FooterComponent } from '../footer/footer.component';
   standalone: true,
   imports: [RouterOutlet, NavbarComponent, FooterComponent],
   template: `
-    <div class="flex flex-col min-h-screen bg-white text-gray-800">
+    <div class="flex flex-col min-h-screen bg-surface text-on-surface">
+      <app-navbar />
 
-      <app-navbar></app-navbar>
-
-      <main class="flex-1">
-        <router-outlet></router-outlet>
+      <!-- pt-20 compensa la navbar fija -->
+      <main class="flex-1 pt-20">
+        <router-outlet />
       </main>
 
-      <app-footer></app-footer>
-
+      <app-footer />
     </div>
-  `
+  `,
 })
 export class MainLayoutComponent {}

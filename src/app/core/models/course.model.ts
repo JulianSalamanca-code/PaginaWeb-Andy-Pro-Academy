@@ -1,13 +1,17 @@
 export interface Course {
   id: string;
-  title: string;
   slug: string;
+  title: string;
+  tagline: string;
   description: string;
-  shortDescription: string;
-  category: string;
+  tag: string;
   level: string;
+  duration: string;
+  sessions: number;
   price: number;
-  thumbnail: string;
+  depositAmount: number;
+  topics: string[];
+  includes: string[];
+  coverUrl: string | null;
   isPublished: boolean;
-  createdAt: Date;
 }
