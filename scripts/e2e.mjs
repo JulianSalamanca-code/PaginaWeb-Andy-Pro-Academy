@@ -193,9 +193,9 @@ if (booking.status === 201) {
 
   check('Folio con prefijo ANDY-', b.code?.startsWith('ANDY-'), b.code);
   check('Estado pendiente', b.status === 'pendiente');
-  check('Total 2300 (1850+250+200)', b.priceTotal === 2300, `${b.priceTotal}`);
-  check('Anticipo 690 (30%)', b.depositAmount === 690, `${b.depositAmount}`);
-  check('Saldo 1610', b.balanceAmount === 1610, `${b.balanceAmount}`);
+  check('Total 2230 (1850+180+200)', b.priceTotal === 2230, `${b.priceTotal}`);
+  check('Anticipo 669 (30%)', b.depositAmount === 669, `${b.depositAmount}`);
+  check('Saldo 1561', b.balanceAmount === 1561, `${b.balanceAmount}`);
   check('Duracion 115 min', (new Date(b.endsAt) - new Date(b.startsAt)) / 60000 === 115);
 }
 

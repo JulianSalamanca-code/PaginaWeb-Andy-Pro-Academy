@@ -32,7 +32,7 @@
             "outputMode": "static",
             "outputPath": "dist/andy-pro-academy",
             "security": {
-              "allowedHosts": []
+              "allowedHosts": ["localhost", "127.0.0.1"]
             },
             "ssr": {
               "entry": "src/server.ts"
@@ -69,7 +69,8 @@
               "buildTarget": "Andy-Pro-Academy:build:production"
             },
             "development": {
-              "buildTarget": "Andy-Pro-Academy:build:development"
+              "buildTarget": "Andy-Pro-Academy:build:development",
+              "allowedHosts": ["localhost", "127.0.0.1"]
             }
           },
           "defaultConfiguration": "development"
